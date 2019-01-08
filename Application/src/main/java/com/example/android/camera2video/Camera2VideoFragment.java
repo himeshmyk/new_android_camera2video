@@ -26,6 +26,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
@@ -35,9 +36,15 @@ import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
+import android.hardware.camera2.CaptureFailure;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.CaptureResult;
+import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.Image;
+import android.media.ImageReader;
 import android.media.MediaRecorder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -56,8 +63,11 @@ import android.widget.Button;
 import android.widget.Toast;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -278,12 +288,63 @@ public class Camera2VideoFragment extends Fragment
         return inflater.inflate(R.layout.fragment_camera2_video, container, false);
     }
 
+    //hello
+    private Button mPauseResumeButton;
+    private Boolean mIsRecordingPaused = false;
+
     @Override
     public void onViewCreated(final View view, Bundle savedInstanceState) {
         mTextureView = (AutoFitTextureView) view.findViewById(R.id.texture);
         mButtonVideo = (Button) view.findViewById(R.id.video);
         mButtonVideo.setOnClickListener(this);
         view.findViewById(R.id.info).setOnClickListener(this);
+        mTextureView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                lockFocus();
+            }
+        });
+
+        //hello
+        mPauseResumeButton = (Button) view.findViewById(R.id.pauseresume);
+        mPauseResumeButton.setOnClickListener(new View.OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+
+                //hello first, check api level
+                //then check following cases:
+                //1. video not started/started and stopped => dont do anythigg, and show toast that cant pause/resume (mIsRecordingVideo = false; mIsRecordingPaused = false;)
+                //2. video started and not paused/paused and then resumed => pause on click, change text of button, change boolean vars accordingly (mIsRecordingVideo = true; mIsRecordingPaused = false;)
+                //3. video started and paused (and resumed and then paused) => resume on click, change text of button, change boolean vars accordingly (mIsRecordingVideo = false; mIsRecordingPaused = true;)
+
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {   //first, check min api 24 level
+                    if(mIsRecordingVideo) {     //case 2
+                        mPauseResumeButton.setText(R.string.resume);
+                        mIsRecordingVideo = false;
+                        mIsRecordingPaused = true;
+                        mMediaRecorder.pause();
+                        Toast.makeText(getActivity(), "video paused", Toast.LENGTH_SHORT).show();
+                    }
+
+                    else {
+                        if(mIsRecordingPaused) { //case 3
+                            mPauseResumeButton.setText(R.string.pause);
+                            mIsRecordingVideo = true;
+                            mIsRecordingPaused = false;
+                            mMediaRecorder.resume();
+                            Toast.makeText(getActivity(), "video resumed", Toast.LENGTH_SHORT).show();
+                        }
+                        else { //case 1
+                            Toast.makeText(getActivity(), "cant pause/resume when not recording video", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                } else {
+                    Toast.makeText(getActivity(), "pause/resume functionality only for above nougat (api level 24", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
     }
 
     @Override
@@ -306,12 +367,23 @@ public class Camera2VideoFragment extends Fragment
 
     @Override
     public void onClick(View view) {
+
+        //hello changes:
+        //1. video not started/started and stopped (mIsRecordingVideo = false; mIsRecordingPaused = false;) =>in this case, clicking on record button starts video recording (change to mIsRecordingVideo = true; mIsRecordingPaused = false;)
+        //2. video started and not paused/paused and then resumed (mIsRecordingVideo = true; mIsRecordingPaused = false;)=>in this case, clicking on record button stops video recording (change to mIsRecordingVideo = false; mIsRecordingPaused = false;)
+        //3. video started and paused (and resumed and then paused) (mIsRecordingVideo = false; mIsRecordingPaused = true;)=>in this case, clicking on record button stops video recording (change to mIsRecordingVideo = false; mIsRecordingPaused = false;)
+
+        // case 4 (mIsRecordingVideo = true; mIsRecordingPaused = true;) cant ever happen
+
+
         switch (view.getId()) {
             case R.id.video: {
-                if (mIsRecordingVideo) {
-                    stopRecordingVideo();
-                } else {
-                    startRecordingVideo();
+                if (!mIsRecordingVideo && !mIsRecordingPaused) {
+                    startRecordingVideo();  //case 1
+                } else if (mIsRecordingVideo && !mIsRecordingPaused) {
+                    stopRecordingVideo();   //case 2
+                } else if (!mIsRecordingVideo && mIsRecordingPaused) {
+                    stopRecordingVideo();   //case 3
                 }
                 break;
             }
@@ -451,6 +523,27 @@ public class Camera2VideoFragment extends Fragment
             configureTransform(width, height);
             mMediaRecorder = new MediaRecorder();
             manager.openCamera(cameraId, mStateCallback, null);
+
+
+
+
+            //HI HELLO?? HI HELLO?? HI HELLO?? DOES THIS WORK?? (FROM http://werner-dittmann.blogspot.com/2016/03/using-androids-imagereader-with-camera2.html)
+            /*
+            Size largest = Collections.max(
+                    Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)),
+                    new CompareSizesByArea());
+            mImageReader = ImageReader.newInstance(largest.getWidth(), largest.getHeight(),
+                    ImageFormat.JPEG, 2);  //HELLO HELLO HELLO HELLO HELLO VALUE OF MAXIMAGES??
+            */
+            mImageReader = ImageReader.newInstance(mVideoSize.getWidth(), mVideoSize.getHeight(),
+                    ImageFormat.JPEG, 10);  //HELLO HELLO HELLO HELLO HELLO VALUE OF MAXIMAGES??
+
+
+
+
+
+
+            mImageReader.setOnImageAvailableListener(mOnImageAvailableListener, mBackgroundHandler);
         } catch (CameraAccessException e) {
             Toast.makeText(activity, "Cannot access the camera.", Toast.LENGTH_SHORT).show();
             activity.finish();
@@ -500,7 +593,8 @@ public class Camera2VideoFragment extends Fragment
             Surface previewSurface = new Surface(texture);
             mPreviewBuilder.addTarget(previewSurface);
 
-            mCameraDevice.createCaptureSession(Collections.singletonList(previewSurface),
+            //hello
+            mCameraDevice.createCaptureSession(Collections.singletonList(previewSurface),   //hello Arrays.asList(previewSurface, mImageReader.getSurface()) for still capture while not recording, but for now we dont need to capture images when not recording, so dont target mimagereader.getsurface()
                     new CameraCaptureSession.StateCallback() {
 
                         @Override
@@ -533,10 +627,32 @@ public class Camera2VideoFragment extends Fragment
             setUpCaptureRequestBuilder(mPreviewBuilder);
             HandlerThread thread = new HandlerThread("CameraPreview");
             thread.start();
+
             mPreviewSession.setRepeatingRequest(mPreviewBuilder.build(), null, mBackgroundHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
+
+    }
+
+    /**
+     * Update the camera preview while recording. {@link #startPreview()} needs to be called in advance.
+     */
+    private void updatePreviewRecording() {
+        if (null == mCameraDevice) {
+            return;
+        }
+        try {
+            setUpCaptureRequestBuilder(mPreviewBuilder);
+            HandlerThread thread = new HandlerThread("CameraRecording preview");
+            thread.start();
+
+            //HELLO IMP CHECK FN OF SETREPEATING REQUEST, AND WHETHER WE CALL IT FROM RECORDSESSION
+            mRecordCaptureSession.setRepeatingRequest(mPreviewBuilder.build(), null, mBackgroundHandler);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+
     }
 
     private void setUpCaptureRequestBuilder(CaptureRequest.Builder builder) {
@@ -583,7 +699,7 @@ public class Camera2VideoFragment extends Fragment
         mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
         mMediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
         if (mNextVideoAbsolutePath == null || mNextVideoAbsolutePath.isEmpty()) {
-            mNextVideoAbsolutePath = getVideoFilePath(getActivity());
+            mNextVideoAbsolutePath = getVideoFilePath(getActivity(), 1);    //hello 1 for video, 2 for image
         }
         mMediaRecorder.setOutputFile(mNextVideoAbsolutePath);
         mMediaRecorder.setVideoEncodingBitRate(10000000);
@@ -603,11 +719,17 @@ public class Camera2VideoFragment extends Fragment
         mMediaRecorder.prepare();
     }
 
-    private String getVideoFilePath(Context context) {
+    private String getVideoFilePath(Context context, int mediaType) {   //hello change mediaType to sthg like isMediaTypeVideo with boolean true/false
         final File dir = context.getExternalFilesDir(null);
-        return (dir == null ? "" : (dir.getAbsolutePath() + "/"))
-                + System.currentTimeMillis() + ".mp4";
+        String path = (dir == null ? "" : (dir.getAbsolutePath() + "/"))
+                + System.currentTimeMillis();
+        if(mediaType==1)
+            return path + ".mp4";
+        return path + ".jpg";
     }
+
+    //hello
+    private CameraCaptureSession mRecordCaptureSession;
 
     private void startRecordingVideo() {
         if (null == mCameraDevice || !mTextureView.isAvailable() || null == mPreviewSize) {
@@ -632,20 +754,28 @@ public class Camera2VideoFragment extends Fragment
             surfaces.add(recorderSurface);
             mPreviewBuilder.addTarget(recorderSurface);
 
+            //hello add image reader surface to target surfaces for capture session, since we need to capture images while recording (removed mimagereader from startpreview, since we dont need to capture image while not recording, i.e., when startpreview)
+            surfaces.add(mImageReader.getSurface());
+            //hello reqd? mPreviewBuilder.addTarget(mImageReader.getSurface());   NO!!! DONE IN startStillCaptureRequest(). (ONLY ADD TO BUILDER WHEN YOU NEED TO ACTUALLY PERFORM A REQUEST ON THAT SURFACE
+
             // Start a capture session
             // Once the session starts, we can update the UI and start recording
             mCameraDevice.createCaptureSession(surfaces, new CameraCaptureSession.StateCallback() {
 
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
-                    mPreviewSession = cameraCaptureSession;
-                    updatePreview();
+                    mRecordCaptureSession = cameraCaptureSession;
+                    updatePreviewRecording();
                     getActivity().runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
                             // UI
                             mButtonVideo.setText(R.string.stop);
                             mIsRecordingVideo = true;
+
+                            //hello
+                            mIsRecordingPaused = false;
+                            mPauseResumeButton.setText(R.string.pause);
 
                             // Start recording
                             mMediaRecorder.start();
@@ -667,10 +797,15 @@ public class Camera2VideoFragment extends Fragment
 
     }
 
+    //HELLO?? SEPARATE closePreviewSession() AND closeRecordingSession (i think no, since except when closing the camera, we are anyways always creating previewsession/recordsession after this fn call.
     private void closePreviewSession() {
         if (mPreviewSession != null) {
             mPreviewSession.close();
             mPreviewSession = null;
+        }
+        if (mRecordCaptureSession != null) {
+            mRecordCaptureSession.close();
+            mRecordCaptureSession = null;
         }
     }
 
@@ -678,6 +813,11 @@ public class Camera2VideoFragment extends Fragment
         // UI
         mIsRecordingVideo = false;
         mButtonVideo.setText(R.string.record);
+
+        //hello
+        mIsRecordingPaused = false;
+        mPauseResumeButton.setText(R.string.pause);
+
         // Stop recording
         mMediaRecorder.stop();
         mMediaRecorder.reset();
@@ -759,5 +899,198 @@ public class Camera2VideoFragment extends Fragment
         }
 
     }
+
+
+
+
+
+
+
+
+
+
+
+    //hello
+
+    private Size mImageSize;
+    private int mCaptureState = STATE_PREVIEW;
+
+    private ImageReader mImageReader;
+    private final ImageReader.OnImageAvailableListener mOnImageAvailableListener =
+            new ImageReader.OnImageAvailableListener() {
+                @Override
+                public void onImageAvailable(ImageReader reader) {
+                    mBackgroundHandler.post(new ImageSaver(reader.acquireNextImage()));
+                }
+            };
+
+    private static final int STATE_PREVIEW = 0;
+    private static final int STATE_WAIT_LOCK = 1;
+
+    private CameraCaptureSession.CaptureCallback mRecordCaptureCallback = new    //hello no mPreviewCaptureCallback reqd; only 1 record capture callback reqd, since only click image while recording???
+            CameraCaptureSession.CaptureCallback() {
+                private void process(CaptureResult captureResult) {
+                    switch (mCaptureState) {
+                        case STATE_PREVIEW:
+                            // Do nothing
+                            break;
+                        case STATE_WAIT_LOCK:
+                            mCaptureState = STATE_PREVIEW;
+                            Integer afState = captureResult.get(CaptureResult.CONTROL_AF_STATE);
+                            if(afState == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED ||
+                                    afState == CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED) {
+                                //hello
+                                Toast.makeText(getActivity().getApplicationContext(), "AF Locked!", Toast.LENGTH_SHORT).show(); //hello or, just getActivity() also works
+
+                                startStillCaptureRequest();
+
+                                Log.d(logDebugMessage, "stillcapture performed in callback");
+                            }
+                            break;
+                    }
+                }
+
+                @Override
+                public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+                    super.onCaptureCompleted(session, request, result);
+                    process(result);
+                }
+            };
+
+    private void lockFocus() {
+        try {
+            //hello
+            if(mIsRecordingVideo) {
+                mCaptureState = STATE_WAIT_LOCK;
+                mPreviewBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START);
+                mRecordCaptureSession.capture(mPreviewBuilder.build(), mRecordCaptureCallback, mBackgroundHandler);
+            } else {
+                //hello
+                Toast.makeText(getActivity(), "Cant capture image when not recording", Toast.LENGTH_SHORT).show();
+            }
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        } finally {
+            Log.d(logDebugMessage, "focus lock obtained");
+        }
+    }
+
+    private static String mImageFileName;
+
+    /**
+     * Retrieves the JPEG orientation from the specified screen rotation.
+     *
+     * @param rotation The screen rotation.
+     * @return The JPEG orientation (one of 0, 90, 270, and 360)
+     */
+
+    private int getOrientation(int rotation) {
+        // Sensor orientation is 90 for most devices, or 270 for some devices (eg. Nexus 5X)
+        // We have to take that into account and rotate JPEG properly.
+        // For devices with orientation of 90, we simply return our mapping from ORIENTATIONS.
+        // For devices with orientation of 270, we need to rotate the JPEG 180 degrees.
+        return (DEFAULT_ORIENTATIONS.get(rotation) + mSensorOrientation + 270) % 360;
+    }
+
+
+    private void startStillCaptureRequest() {
+        try {
+            if( !mIsRecordingVideo) {    //hello check for not recording video (to not capture image, just in case)
+                return;
+            }
+
+            //hello final CaptureRequest.Builder mPreviewBuilder = ...
+            mPreviewBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);  //hello CameraDevice.TEMPLATE_VIDEO_SNAPSHOT GIVES ERROR IN ANDROID ABOVE 6/7
+            mPreviewBuilder.addTarget(mImageReader.getSurface());
+
+            //HELLO HELLO HELLO HELLO HELLO HELLO HELLO HELLO
+            mPreviewBuilder.set(CaptureRequest.CONTROL_AF_MODE,
+                    CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+            //setAutoFlash(mPreviewBuilder);
+
+            int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();   //hello from configureTransform and setUpMediaRecorder functions
+            mPreviewBuilder.set(CaptureRequest.JPEG_ORIENTATION, getOrientation(rotation));
+
+
+            CameraCaptureSession.CaptureCallback stillCaptureCallback = new
+                    CameraCaptureSession.CaptureCallback() {
+                        @Override
+                        public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
+                            super.onCaptureStarted(session, request, timestamp, frameNumber);
+                            mImageFileName = getVideoFilePath(getActivity(), 2);
+                        }
+
+                        @Override
+                        public void onCaptureFailed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull CaptureFailure failure) {
+                            super.onCaptureFailed(session, request, failure);
+                            Toast.makeText(getActivity(), "capture failed", Toast.LENGTH_SHORT).show();
+                        }
+
+                        @Override
+                        public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+                            //super.onCaptureCompleted(session, request, result);
+                            Toast.makeText(getActivity(), "Image " + mImageFileName + " saved", Toast.LENGTH_SHORT).show();
+                            unlockFocus();
+                        }
+                    };
+
+            mRecordCaptureSession.stopRepeating();
+            mRecordCaptureSession.abortCaptures();
+            mRecordCaptureSession.capture(mPreviewBuilder.build(), stillCaptureCallback, null);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void unlockFocus() {
+        try {
+            // Reset the auto-focus trigger
+            mPreviewBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,
+                    CameraMetadata.CONTROL_AF_TRIGGER_CANCEL);
+            //setAutoFlash(mPreviewRequestBuilder);
+            mRecordCaptureSession.capture(mPreviewBuilder.build(), mRecordCaptureCallback,
+                    mBackgroundHandler);
+            // After this, the camera will go back to the normal state of preview.
+            mCaptureState = STATE_PREVIEW;
+            mRecordCaptureSession.setRepeatingRequest(mPreviewBuilder.build(), mRecordCaptureCallback,
+                    mBackgroundHandler);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static final String logDebugMessage = "from debugging";
+
+    private static class ImageSaver implements Runnable {
+        private final Image mImage;
+        private ImageSaver(Image image) {
+            mImage = image;
+        }
+        @Override
+        public void run() {
+            ByteBuffer byteBuffer = mImage.getPlanes()[0].getBuffer();
+            byte[] bytes = new byte[byteBuffer.remaining()];
+            byteBuffer.get(bytes);
+            FileOutputStream fileOutputStream = null;
+            try {
+                fileOutputStream = new FileOutputStream(mImageFileName);
+                fileOutputStream.write(bytes);
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                mImage.close();
+                Log.d(logDebugMessage, "closed image object in imagesaver's runner.");
+                if(fileOutputStream != null) {
+                    try {
+                        fileOutputStream.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+    }
+
+
 
 }
