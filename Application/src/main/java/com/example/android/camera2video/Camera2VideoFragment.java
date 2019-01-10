@@ -528,20 +528,18 @@ public class Camera2VideoFragment extends Fragment
 
 
             //HI HELLO?? HI HELLO?? HI HELLO?? DOES THIS WORK?? (FROM http://werner-dittmann.blogspot.com/2016/03/using-androids-imagereader-with-camera2.html)
+
             /*
+            mImageReader = ImageReader.newInstance(mVideoSize.getWidth(), mVideoSize.getHeight(),
+                    ImageFormat.JPEG, 10);  //HELLO HELLO HELLO HELLO HELLO VALUE OF MAXIMAGES??
+
+            */
+
             Size largest = Collections.max(
                     Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)),
                     new CompareSizesByArea());
             mImageReader = ImageReader.newInstance(largest.getWidth(), largest.getHeight(),
                     ImageFormat.JPEG, 2);  //HELLO HELLO HELLO HELLO HELLO VALUE OF MAXIMAGES??
-            */
-            mImageReader = ImageReader.newInstance(mVideoSize.getWidth(), mVideoSize.getHeight(),
-                    ImageFormat.JPEG, 10);  //HELLO HELLO HELLO HELLO HELLO VALUE OF MAXIMAGES??
-
-
-
-
-
 
             mImageReader.setOnImageAvailableListener(mOnImageAvailableListener, mBackgroundHandler);
         } catch (CameraAccessException e) {
@@ -971,7 +969,7 @@ public class Camera2VideoFragment extends Fragment
         } catch (CameraAccessException e) {
             e.printStackTrace();
         } finally {
-            Log.d(logDebugMessage, "focus lock obtained");
+            Log.d(logDebugMessage, "focus lock obtained/toast shown");
         }
     }
 
@@ -999,17 +997,17 @@ public class Camera2VideoFragment extends Fragment
                 return;
             }
 
-            //hello final CaptureRequest.Builder mPreviewBuilder = ...
-            mPreviewBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);  //hello CameraDevice.TEMPLATE_VIDEO_SNAPSHOT GIVES ERROR IN ANDROID ABOVE 6/7
-            mPreviewBuilder.addTarget(mImageReader.getSurface());
+            //hello mPreviewBuilder = ...
+            final CaptureRequest.Builder captureBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);  //hello CameraDevice.TEMPLATE_VIDEO_SNAPSHOT GIVES ERROR IN ANDROID ABOVE 6/7
+            captureBuilder.addTarget(mImageReader.getSurface());
 
             //HELLO HELLO HELLO HELLO HELLO HELLO HELLO HELLO
-            mPreviewBuilder.set(CaptureRequest.CONTROL_AF_MODE,
+            captureBuilder.set(CaptureRequest.CONTROL_AF_MODE,
                     CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-            //setAutoFlash(mPreviewBuilder);
+            //setAutoFlash(captureBuilder);
 
             int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();   //hello from configureTransform and setUpMediaRecorder functions
-            mPreviewBuilder.set(CaptureRequest.JPEG_ORIENTATION, getOrientation(rotation));
+            captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, getOrientation(rotation));
 
 
             CameraCaptureSession.CaptureCallback stillCaptureCallback = new
@@ -1018,33 +1016,41 @@ public class Camera2VideoFragment extends Fragment
                         public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
                             super.onCaptureStarted(session, request, timestamp, frameNumber);
                             mImageFileName = getVideoFilePath(getActivity(), 2);
+                            Log.d(logDebugMessage, "capture started; image " + mImageFileName);
                         }
 
                         @Override
                         public void onCaptureFailed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull CaptureFailure failure) {
                             super.onCaptureFailed(session, request, failure);
                             Toast.makeText(getActivity(), "capture failed", Toast.LENGTH_SHORT).show();
+                            Log.d(logDebugMessage, "capture failed");
                         }
 
                         @Override
                         public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                             //super.onCaptureCompleted(session, request, result);
                             Toast.makeText(getActivity(), "Image " + mImageFileName + " saved", Toast.LENGTH_SHORT).show();
-                            unlockFocus();
+                            //HELLO HELLO I think unlockfocus not needed, since separate builders for video and image. video builder has already been set in start
+                            //OR, even if needed, then for captureBuilder rather than for mpreviewbuilder
+                            //unlockFocus();
                         }
                     };
 
-            mRecordCaptureSession.stopRepeating();
-            mRecordCaptureSession.abortCaptures();
-            mRecordCaptureSession.capture(mPreviewBuilder.build(), stillCaptureCallback, null);
+            //HELLO HELLO same explanation as of oncapturecompleted
+            //mRecordCaptureSession.stopRepeating();
+            //mRecordCaptureSession.abortCaptures();
+            Log.d(logDebugMessage, "stopped repeating; starting capture");
+            mRecordCaptureSession.capture(captureBuilder.build(), stillCaptureCallback, null);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
     }
 
+    //HELLO I THINK PROBLEM IN THIS ONE.
     private void unlockFocus() {
         try {
             // Reset the auto-focus trigger
+            Log.d(logDebugMessage, "unlocking focus");
             mPreviewBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,
                     CameraMetadata.CONTROL_AF_TRIGGER_CANCEL);
             //setAutoFlash(mPreviewRequestBuilder);

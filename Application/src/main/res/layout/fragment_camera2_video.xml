@@ -33,6 +33,13 @@
         android:background="#4285f4">
 
         <Button
+            android:id="@+id/pauseresume"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical|left"
+            android:text="@string/pause" />
+
+        <Button
             android:id="@+id/video"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
