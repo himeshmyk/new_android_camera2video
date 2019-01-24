@@ -60,6 +60,7 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.Toast;
 
 import java.io.File;
@@ -305,6 +306,20 @@ public class Camera2VideoFragment extends Fragment
             }
         });
 
+
+
+
+
+
+        //hello latest change for flashlight
+        mFlashButton = view.findViewById(R.id.btn_flash);
+        mFlashButton.setOnClickListener(this);
+
+
+
+
+
+
         //hello
         mPauseResumeButton = (Button) view.findViewById(R.id.pauseresume);
         mPauseResumeButton.setOnClickListener(new View.OnClickListener() {
@@ -397,6 +412,22 @@ public class Camera2VideoFragment extends Fragment
                 }
                 break;
             }
+
+
+
+
+
+
+            //hello latest change for flashlight
+            case R.id.btn_flash: {
+                switchFlash();
+                break;
+            }
+
+
+
+
+
         }
     }
 
@@ -481,6 +512,87 @@ public class Camera2VideoFragment extends Fragment
         return true;
     }
 
+
+
+
+
+
+
+    //hello latest change for flashlight
+    public static final String CAMERA_FRONT = "1";
+    public static final String CAMERA_BACK = "0";
+
+    private String cameraId = CAMERA_BACK;
+    private boolean mIsFlashSupported = false;
+    private boolean mIsTorchOn = false;
+    private ImageButton mFlashButton;
+
+    public void switchFlash() {
+        try {
+            if (cameraId.equals(CAMERA_BACK)) {
+                if (mIsFlashSupported) {
+                    if (mIsTorchOn) {
+                        mPreviewBuilder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_OFF);
+
+                        //hello latest flashlight
+                        if(mIsRecordingVideo) {
+                            mRecordCaptureSession.setRepeatingRequest(mPreviewBuilder.build(), null, mBackgroundHandler);   //hello? latest flashlight mRecordCaptureSession or mPreviewSession?
+                        } else {
+                            mPreviewSession.setRepeatingRequest(mPreviewBuilder.build(), null, mBackgroundHandler);   //hello? latest flashlight mRecordCaptureSession or mPreviewSession?
+                        }
+
+
+                        mFlashButton.setImageResource(R.mipmap.btn_flash_off);
+                        mIsTorchOn = false;
+                    } else {
+                        mPreviewBuilder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_TORCH);
+
+
+                        //hello latest flashlight
+                        if(mIsRecordingVideo) {
+                            mRecordCaptureSession.setRepeatingRequest(mPreviewBuilder.build(), null, mBackgroundHandler);   //hello? latest flashlight mRecordCaptureSession or mPreviewSession?
+                        } else {
+                            mPreviewSession.setRepeatingRequest(mPreviewBuilder.build(), null, mBackgroundHandler);   //hello? latest flashlight mRecordCaptureSession or mPreviewSession?
+                        }
+
+
+                        mFlashButton.setImageResource(R.mipmap.btn_flash_on);
+                        mIsTorchOn = true;
+                    }
+                }
+            }
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void setupFlashButton() {
+        if (cameraId.equals(CAMERA_BACK) && mIsFlashSupported) {
+            mFlashButton.setVisibility(View.VISIBLE);
+
+            if (mIsTorchOn) {
+                mFlashButton.setImageResource(R.mipmap.btn_flash_off);
+            } else {
+                mFlashButton.setImageResource(R.mipmap.btn_flash_on);
+            }
+
+        } else {
+            mFlashButton.setVisibility(View.GONE);
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
     /**
      * Tries to open a {@link CameraDevice}. The result is listened by `mStateCallback`.
      */
@@ -520,6 +632,27 @@ public class Camera2VideoFragment extends Fragment
             } else {
                 mTextureView.setAspectRatio(mPreviewSize.getHeight(), mPreviewSize.getWidth());
             }
+
+
+
+
+
+
+            //hello latest change for flashlight
+            Boolean available = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+            mIsFlashSupported = available == null ? false : available;
+
+            setupFlashButton();
+
+
+
+
+
+
+
+
+
+
             configureTransform(width, height);
             mMediaRecorder = new MediaRecorder();
             manager.openCamera(cameraId, mStateCallback, null);
@@ -815,6 +948,15 @@ public class Camera2VideoFragment extends Fragment
         //hello
         mIsRecordingPaused = false;
         mPauseResumeButton.setText(R.string.pause);
+
+        //hello latest change https://stackoverflow.com/questions/27907090/android-camera-2-api/35739021#35739021
+        // Added by Ben Ning, to resolve exception issue when stop recording.
+        try {
+            mRecordCaptureSession.stopRepeating();
+            mRecordCaptureSession.abortCaptures();
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
 
         // Stop recording
         mMediaRecorder.stop();
